@@ -1,0 +1,17 @@
+---
+title: "Your Document Title"
+author:
+  name: Matthew Wolf
+  email: mcw2209@columbia.edu
+  affiliation: Columbia University
+
+
+date: "today"
+format:
+  html:
+    toc: true
+    theme: yeti
+---
+
+
+
