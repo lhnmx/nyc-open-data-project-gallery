@@ -7,7 +7,9 @@ interface MapProps {
   vizMode: VizMode;
   sidebarOpen: boolean;
   selectedBorough: Borough;
+  selectedZip?: string | null;
   onSelectBorough?: (borough: Borough) => void;
+  onSelectZip?: (zip: string, boro?: string) => void;
 }
 
 const STYLES = {
@@ -29,7 +31,9 @@ export const Map: React.FC<MapProps> = ({
   vizMode,
   sidebarOpen,
   selectedBorough,
+  selectedZip,
   onSelectBorough,
+  onSelectZip,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<maplibregl.Map | null>(null);
@@ -39,7 +43,8 @@ export const Map: React.FC<MapProps> = ({
     map: maplibregl.Map,
     currentStyle: 'dark' | 'light',
     currentBoro: Borough,
-    currentViz: VizMode
+    currentViz: VizMode,
+    activeZip?: string | null
   ) => {
     const isLight = currentStyle === 'light';
 
@@ -68,17 +73,17 @@ export const Map: React.FC<MapProps> = ({
           'fill-color': [
             'step',
             ['get', 'count'],
-            isLight ? '#f1f5f9' : '#1e293b', // 0 complaints: subtle blank slate
+            isLight ? '#f1f5f9' : '#1e293b',
             1,
-            '#fef08a', // 1-5 complaints: soft yellow
+            '#fef08a',
             6,
-            '#fcd34d', // 6-15: amber yellow
+            '#fcd34d',
             16,
-            '#fb923c', // 16-30: vibrant orange
+            '#fb923c',
             31,
-            '#f87171', // 31-45: coral red
+            '#f87171',
             46,
-            '#dc2626', // 46+: dark crimson red
+            '#dc2626',
           ],
           'fill-opacity': [
             'case',
@@ -101,13 +106,27 @@ export const Map: React.FC<MapProps> = ({
         },
         paint: {
           'line-color': isLight ? '#94a3b8' : '#475569',
-          'line-width': [
-            'case',
-            ['boolean', ['feature-state', 'hover'], false],
-            2,
-            0.75,
-          ],
+          'line-width': 0.75,
           'line-opacity': 0.7,
+        },
+      });
+    }
+
+    // Selected ZIP Code Highlight Border
+    if (!map.getLayer('zip-selected-border')) {
+      map.addLayer({
+        id: 'zip-selected-border',
+        type: 'line',
+        source: 'nyc-zips',
+        filter: ['==', ['get', 'modzcta'], activeZip || ''],
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#2563eb',
+          'line-width': 3.5,
+          'line-opacity': 1,
         },
       });
     }
@@ -148,7 +167,6 @@ export const Map: React.FC<MapProps> = ({
       });
     }
 
-    // Borough Fill (Base)
     if (!map.getLayer('borough-fill')) {
       map.addLayer({
         id: 'borough-fill',
@@ -169,7 +187,6 @@ export const Map: React.FC<MapProps> = ({
       });
     }
 
-    // Subtle outline for all boroughs
     if (!map.getLayer('borough-base-borders')) {
       map.addLayer({
         id: 'borough-base-borders',
@@ -248,7 +265,7 @@ export const Map: React.FC<MapProps> = ({
     }
 
     // ----------------------------------------------------
-    // 5. Highlight Border for Selected Borough (ON TOP)
+    // 5. Borough Highlight Border (ON TOP)
     // ----------------------------------------------------
     if (!map.getLayer('borough-highlight-border')) {
       map.addLayer({
@@ -365,7 +382,6 @@ export const Map: React.FC<MapProps> = ({
     // ----------------------------------------------------
     const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 12 });
 
-    // Choropleth Hover & Click
     map.on('mousemove', 'zip-choropleth', (e) => {
       if (!e.features || !e.features[0]) return;
       const feat = e.features[0];
@@ -396,6 +412,7 @@ export const Map: React.FC<MapProps> = ({
       const props = e.features[0].properties as {
         modzcta?: string;
         label?: string;
+        borough?: string;
         pop_est?: string;
         count?: number;
       };
@@ -406,10 +423,15 @@ export const Map: React.FC<MapProps> = ({
         ? ((count / Number(props.pop_est)) * 10000).toFixed(1)
         : 'N/A';
 
+      const zip = props.modzcta || '';
+      if (zip && onSelectZip) {
+        onSelectZip(zip, props.borough);
+      }
+
       const html = `
         <div style="font-family: inherit; font-size: 12px; color: #0f172a; padding: 4px; min-width: 140px;">
-          <div style="font-weight: 700; color: #1d4ed8; font-size: 13px; margin-bottom: 2px;">ZIP ${props.modzcta || ''}</div>
-          <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${props.label || ''}</div>
+          <div style="font-weight: 700; color: #1d4ed8; font-size: 13px; margin-bottom: 2px;">ZIP ${zip}</div>
+          <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${props.borough || ''} (${props.label || ''})</div>
           <div style="display: flex; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-bottom: 2px;">
             <span>Complaints:</span>
             <strong style="color: #dc2626;">${count}</strong>
@@ -427,7 +449,6 @@ export const Map: React.FC<MapProps> = ({
       popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
     });
 
-    // Borough click
     map.on('click', 'borough-fill', (e) => {
       if (!e.features || !e.features[0]) return;
       const clickedBoro = e.features[0].properties?.BoroName as Borough;
@@ -436,7 +457,6 @@ export const Map: React.FC<MapProps> = ({
       }
     });
 
-    // Cluster click
     map.on('click', 'clusters', async (e) => {
       const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
       const clusterId = features[0]?.properties?.cluster_id;
@@ -448,7 +468,6 @@ export const Map: React.FC<MapProps> = ({
       }
     });
 
-    // Point click
     map.on('click', 'unclustered-point', (e) => {
       if (!e.features || !e.features[0]) return;
       const feat = e.features[0];
@@ -493,7 +512,7 @@ export const Map: React.FC<MapProps> = ({
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
-    map.on('load', () => addDataLayers(map, mapStyle, selectedBorough, vizMode));
+    map.on('load', () => addDataLayers(map, mapStyle, selectedBorough, vizMode, selectedZip));
     mapInstanceRef.current = map;
 
     return () => {
@@ -507,7 +526,7 @@ export const Map: React.FC<MapProps> = ({
     const map = mapInstanceRef.current;
     if (!map) return;
     map.setStyle(STYLES[mapStyle]);
-    map.once('style.load', () => addDataLayers(map, mapStyle, selectedBorough, vizMode));
+    map.once('style.load', () => addDataLayers(map, mapStyle, selectedBorough, vizMode, selectedZip));
   }, [mapStyle]);
 
   // Toggle Layer Visibility based on vizMode
@@ -519,28 +538,27 @@ export const Map: React.FC<MapProps> = ({
     const isHeatmap = vizMode === 'heatmap';
     const isClusters = vizMode === 'clusters';
 
-    // Choropleth layers
     if (map.getLayer('zip-choropleth')) {
       map.setLayoutProperty('zip-choropleth', 'visibility', isChoropleth ? 'visible' : 'none');
     }
     if (map.getLayer('zip-borders')) {
       map.setLayoutProperty('zip-borders', 'visibility', isChoropleth ? 'visible' : 'none');
     }
+    if (map.getLayer('zip-selected-border')) {
+      map.setLayoutProperty('zip-selected-border', 'visibility', isChoropleth ? 'visible' : 'none');
+    }
     if (map.getLayer('zip-labels')) {
       map.setLayoutProperty('zip-labels', 'visibility', isChoropleth ? 'visible' : 'none');
     }
 
-    // Borough base fill
     if (map.getLayer('borough-fill')) {
       map.setLayoutProperty('borough-fill', 'visibility', !isChoropleth ? 'visible' : 'none');
     }
 
-    // Heatmap layer
     if (map.getLayer('311-heatmap')) {
       map.setLayoutProperty('311-heatmap', 'visibility', isHeatmap ? 'visible' : 'none');
     }
 
-    // Clusters layers
     if (map.getLayer('clusters')) {
       map.setLayoutProperty('clusters', 'visibility', isClusters ? 'visible' : 'none');
     }
@@ -551,6 +569,34 @@ export const Map: React.FC<MapProps> = ({
       map.setLayoutProperty('unclustered-point', 'visibility', isClusters ? 'visible' : 'none');
     }
   }, [vizMode]);
+
+  // Handle Selected ZIP Fly-To & Highlight
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    if (map.getLayer('zip-selected-border')) {
+      map.setFilter('zip-selected-border', ['==', ['get', 'modzcta'], selectedZip || '']);
+    }
+
+    if (selectedZip) {
+      // Find the centroid in zip_index
+      fetch('/data/zip_index.json')
+        .then((res) => res.json())
+        .then((items: { zip: string; center: [number, number] }[]) => {
+          const match = items.find((i) => i.zip === selectedZip);
+          if (match && match.center) {
+            map.flyTo({
+              center: match.center,
+              zoom: 13.5,
+              essential: true,
+              duration: 1200,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [selectedZip]);
 
   // Update Borough Highlight Border dynamically
   useEffect(() => {
@@ -580,14 +626,17 @@ export const Map: React.FC<MapProps> = ({
       }
     }
 
-    const target = BOROUGH_BOUNDS[selectedBorough] || BOROUGH_BOUNDS['All'];
-    map.flyTo({
-      center: [target[0], target[1]],
-      zoom: target[2],
-      essential: true,
-      duration: 1200,
-    });
-  }, [selectedBorough, mapStyle]);
+    // Only fly to borough if no specific ZIP is selected
+    if (!selectedZip) {
+      const target = BOROUGH_BOUNDS[selectedBorough] || BOROUGH_BOUNDS['All'];
+      map.flyTo({
+        center: [target[0], target[1]],
+        zoom: target[2],
+        essential: true,
+        duration: 1200,
+      });
+    }
+  }, [selectedBorough, mapStyle, selectedZip]);
 
   // Resize on sidebar collapse
   useEffect(() => {

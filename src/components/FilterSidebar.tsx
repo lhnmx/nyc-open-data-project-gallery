@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
+  X,
   MapPin,
   Bug,
   Volume2,
@@ -15,13 +16,14 @@ import {
   ChevronRight,
   Sparkles,
 } from 'lucide-react';
-import { Borough, ComplaintCategory, FilterState, VizMode } from '../types';
+import { Borough, ComplaintCategory, FilterState, VizMode, ZipEntry } from '../types';
 
 interface FilterSidebarProps {
   filters: FilterState;
   setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  onSelectZipLocation?: (entry: ZipEntry) => void;
 }
 
 const BOROUGHS: Borough[] = ['All', 'Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island'];
@@ -55,7 +57,7 @@ const CATEGORIES: { label: ComplaintCategory; icon: React.ReactNode; lightColor:
     label: 'Illegal Parking',
     icon: <Car className="w-4 h-4" />,
     lightColor: 'bg-emerald-50 text-emerald-800 border-emerald-300 ring-1 ring-emerald-400/40',
-    darkColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 ring-1 ring-emerald-400/40',
+    darkColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 ring-1 ring-emerald-500/40',
   },
   {
     label: 'Sanitation / Dirty Conditions',
@@ -76,8 +78,72 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   setFilters,
   isOpen,
   setIsOpen,
+  onSelectZipLocation,
 }) => {
   const isLight = filters.mapStyle === 'light';
+  const [zipList, setZipList] = useState<ZipEntry[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load zip index
+  useEffect(() => {
+    fetch('/data/zip_index.json')
+      .then((res) => res.json())
+      .then((data: ZipEntry[]) => setZipList(data))
+      .catch((err) => console.error('Error loading zip index:', err));
+  }, []);
+
+  // Filter suggestions
+  const q = filters.searchQuery.trim().toLowerCase();
+  const suggestions = q.length > 0
+    ? zipList.filter(
+        (item) =>
+          item.zip.toLowerCase().includes(q) ||
+          item.label.toLowerCase().includes(q) ||
+          item.borough.toLowerCase().includes(q)
+      ).slice(0, 6)
+    : [];
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectEntry = (entry: ZipEntry) => {
+    setFilters((prev) => ({
+      ...prev,
+      searchQuery: entry.zip,
+      selectedZip: entry.zip,
+      borough: entry.borough as Borough,
+    }));
+    setShowSuggestions(false);
+    if (onSelectZipLocation) {
+      onSelectZipLocation(entry);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setFilters((prev) => ({
+      ...prev,
+      searchQuery: '',
+      selectedZip: null,
+    }));
+    setShowSuggestions(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && suggestions.length > 0) {
+      handleSelectEntry(suggestions[0]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    }
+  };
 
   return (
     <>
@@ -159,7 +225,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
 
         {/* Scrollable Filters Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* 1. Visualization Mode (Choropleth vs Heatmap vs Clusters) */}
+          {/* 1. Visualization Mode */}
           <div>
             <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Map View Layer
@@ -229,27 +295,71 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
             )}
           </div>
 
-          {/* 2. Search Box */}
-          <div>
+          {/* 2. Interactive Search Box with Suggestions */}
+          <div ref={searchContainerRef} className="relative">
             <label className={`text-xs font-bold uppercase tracking-wider mb-1.5 block ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Search Location
+              Search ZIP or Borough
             </label>
             <div className="relative">
               <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
               <input
                 type="text"
-                placeholder="ZIP code, neighborhood, street..."
+                placeholder="Type ZIP code (e.g. 10025, 11201)..."
                 value={filters.searchQuery}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, searchQuery: e.target.value }))
-                }
-                className={`w-full pl-9 pr-3 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 ${
+                onFocus={() => setShowSuggestions(true)}
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, searchQuery: e.target.value }));
+                  setShowSuggestions(true);
+                }}
+                onKeyDown={handleKeyDown}
+                className={`w-full pl-9 pr-8 py-2 rounded-lg text-sm transition focus:outline-none focus:ring-2 ${
                   isLight
                     ? 'bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20'
                     : 'bg-slate-800/80 border border-slate-700 text-slate-200 placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500/40'
                 }`}
               />
+              {filters.searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
+
+            {/* Suggestions Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div
+                className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border shadow-xl overflow-hidden backdrop-blur-md max-h-56 overflow-y-auto ${
+                  isLight
+                    ? 'bg-white/95 border-slate-200 text-slate-800 divide-y divide-slate-100'
+                    : 'bg-slate-900/95 border-slate-700 text-slate-200 divide-y divide-slate-800'
+                }`}
+              >
+                {suggestions.map((item) => (
+                  <button
+                    key={item.zip}
+                    onClick={() => handleSelectEntry(item)}
+                    className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between transition ${
+                      isLight ? 'hover:bg-blue-50/80' : 'hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">{item.zip}</span>
+                        <span className="text-[11px] text-slate-400 ml-1.5">({item.borough})</span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
+                      {item.count} complaints
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 3. Borough Selector */}
@@ -264,7 +374,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 return (
                   <button
                     key={b}
-                    onClick={() => setFilters((prev) => ({ ...prev, borough: b }))}
+                    onClick={() => setFilters((prev) => ({ ...prev, borough: b, selectedZip: null }))}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg border text-left transition ${
                       isSelected
                         ? isLight
@@ -330,11 +440,13 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span>Active Scope</span>
-              <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>{filters.borough}</span>
+              <span>Selected Area</span>
+              <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
+                {filters.selectedZip ? `ZIP ${filters.selectedZip}` : filters.borough}
+              </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span>Selected Focus</span>
+              <span>Complaint Focus</span>
               <span className={`font-semibold ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>{filters.category}</span>
             </div>
             <div className={`pt-2 border-t flex items-center justify-between ${isLight ? 'border-slate-200' : 'border-slate-700/60'}`}>

@@ -13,6 +13,7 @@ export type VizMode = 'choropleth' | 'heatmap' | 'clusters';
 
 export interface FilterState {
   searchQuery: string;
+  selectedZip?: string | null;
   borough: Borough;
   category: ComplaintCategory;
   selectedMonthIndex: number;
@@ -25,4 +26,13 @@ export interface TimelineMonth {
   shortLabel: string;
   year: number;
   month: number;
+}
+
+export interface ZipEntry {
+  zip: string;
+  label: string;
+  borough: string;
+  count: number;
+  pop: number;
+  center: [number, number];
 }

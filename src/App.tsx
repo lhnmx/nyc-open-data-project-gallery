@@ -24,6 +24,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filters, setFilters] = useState<FilterState>({
     searchQuery: '',
+    selectedZip: null,
     borough: 'All',
     category: 'Rodent / Pest',
     selectedMonthIndex: 6, // Default to July (peak season)
@@ -43,10 +44,21 @@ export function App() {
         vizMode={filters.vizMode}
         sidebarOpen={sidebarOpen}
         selectedBorough={filters.borough}
-        onSelectBorough={(boro) => setFilters((prev) => ({ ...prev, borough: boro }))}
+        selectedZip={filters.selectedZip}
+        onSelectBorough={(boro) =>
+          setFilters((prev) => ({ ...prev, borough: boro, selectedZip: null }))
+        }
+        onSelectZip={(zip, boro) =>
+          setFilters((prev) => ({
+            ...prev,
+            selectedZip: zip,
+            searchQuery: zip,
+            borough: (boro as any) || prev.borough,
+          }))
+        }
       />
 
-      {/* 2. Filter Sidebar */}
+      {/* 2. Filter Sidebar with Search */}
       <FilterSidebar
         filters={filters}
         setFilters={setFilters}
