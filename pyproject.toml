@@ -7,7 +7,9 @@ authors = [
     { name = "Minh Le", email = "lehnminh@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "python-dotenv>=1.2.4",
+]
 
 [project.scripts]
 nyc-open-data-project-gallery = "nyc_open_data_project_gallery:main"
