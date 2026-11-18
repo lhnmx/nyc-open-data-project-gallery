@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import { Borough, ComplaintCategory, FilterState, VizMode, ZipEntry } from '../types';
 
@@ -24,6 +25,7 @@ interface FilterSidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onSelectZipLocation?: (entry: ZipEntry) => void;
+  onResetView?: () => void;
 }
 
 const BOROUGHS: Borough[] = ['All', 'Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island'];
@@ -79,6 +81,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   isOpen,
   setIsOpen,
   onSelectZipLocation,
+  onResetView,
 }) => {
   const isLight = filters.mapStyle === 'light';
   const [zipList, setZipList] = useState<ZipEntry[]>([]);
@@ -193,6 +196,19 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
+            {onResetView && (
+              <button
+                onClick={onResetView}
+                className={`p-1.5 rounded-md transition ${
+                  isLight
+                    ? 'hover:bg-slate-100 text-slate-600 hover:text-blue-600'
+                    : 'hover:bg-slate-800 text-slate-400 hover:text-cyan-400'
+                }`}
+                title="Reset All Filters & View"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() =>
                 setFilters((prev) => ({
@@ -460,6 +476,21 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               </span>
             </div>
           </div>
+
+          {/* Reset View Button */}
+          {onResetView && (
+            <button
+              onClick={onResetView}
+              className={`w-full py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                isLight
+                  ? 'bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 border-slate-200'
+                  : 'bg-slate-800/60 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to City Overview</span>
+            </button>
+          )}
         </div>
 
         {/* Footer info */}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
+import { RotateCcw } from 'lucide-react';
 import { Borough, VizMode } from '../types';
 
 interface MapProps {
@@ -10,6 +11,7 @@ interface MapProps {
   selectedZip?: string | null;
   onSelectBorough?: (borough: Borough) => void;
   onSelectZip?: (zip: string, boro?: string) => void;
+  onResetView?: () => void;
 }
 
 const STYLES = {
@@ -34,6 +36,7 @@ export const Map: React.FC<MapProps> = ({
   selectedZip,
   onSelectBorough,
   onSelectZip,
+  onResetView,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<maplibregl.Map | null>(null);
@@ -632,6 +635,8 @@ export const Map: React.FC<MapProps> = ({
       map.flyTo({
         center: [target[0], target[1]],
         zoom: target[2],
+        pitch: 15,
+        bearing: 0,
         essential: true,
         duration: 1200,
       });
@@ -651,6 +656,22 @@ export const Map: React.FC<MapProps> = ({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainerRef} className="w-full h-full" />
+
+      {/* Floating Reset View Button */}
+      {onResetView && (
+        <button
+          onClick={onResetView}
+          className={`absolute top-2.5 right-14 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border shadow-md backdrop-blur-md text-xs font-semibold transition ${
+            isLight
+              ? 'bg-white/95 hover:bg-slate-50 text-slate-700 border-slate-200 hover:text-blue-600'
+              : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700 hover:text-cyan-400'
+          }`}
+          title="Reset map camera and filters to city overview"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Reset View</span>
+        </button>
+      )}
 
       {/* Floating Choropleth Legend (Top-Right, below zoom controls) */}
       {vizMode === 'choropleth' && (

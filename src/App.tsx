@@ -34,6 +34,18 @@ export function App() {
 
   const isLight = filters.mapStyle === 'light';
 
+  const handleResetView = () => {
+    setFilters((prev) => ({
+      searchQuery: '',
+      selectedZip: null,
+      borough: 'All',
+      category: 'Rodent / Pest',
+      selectedMonthIndex: 6,
+      mapStyle: prev.mapStyle,
+      vizMode: 'choropleth',
+    }));
+  };
+
   return (
     <div className={`relative w-screen h-screen overflow-hidden font-sans transition-colors duration-300 ${
       isLight ? 'bg-slate-100 text-slate-800' : 'bg-slate-950 text-slate-100'
@@ -56,6 +68,7 @@ export function App() {
             borough: (boro as any) || prev.borough,
           }))
         }
+        onResetView={handleResetView}
       />
 
       {/* 2. Filter Sidebar with Search */}
@@ -64,6 +77,7 @@ export function App() {
         setFilters={setFilters}
         isOpen={sidebarOpen}
         setIsOpen={setSidebarOpen}
+        onResetView={handleResetView}
       />
 
       {/* 3. Interactive Timeline */}
