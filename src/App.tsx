@@ -31,6 +31,7 @@ export function App() {
     mapStyle: 'light', // Light mode default
     vizMode: 'choropleth', // Choropleth default
   });
+  const [resetKey, setResetKey] = useState(0);
 
   const isLight = filters.mapStyle === 'light';
 
@@ -44,6 +45,7 @@ export function App() {
       mapStyle: prev.mapStyle,
       vizMode: 'choropleth',
     }));
+    setResetKey((k) => k + 1);
   };
 
   return (
@@ -57,6 +59,7 @@ export function App() {
         sidebarOpen={sidebarOpen}
         selectedBorough={filters.borough}
         selectedZip={filters.selectedZip}
+        resetKey={resetKey}
         onSelectBorough={(boro) =>
           setFilters((prev) => ({ ...prev, borough: boro, selectedZip: null }))
         }

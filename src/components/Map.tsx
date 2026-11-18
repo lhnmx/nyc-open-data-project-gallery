@@ -9,6 +9,7 @@ interface MapProps {
   sidebarOpen: boolean;
   selectedBorough: Borough;
   selectedZip?: string | null;
+  resetKey?: number;
   onSelectBorough?: (borough: Borough) => void;
   onSelectZip?: (zip: string, boro?: string) => void;
   onResetView?: () => void;
@@ -34,6 +35,7 @@ export const Map: React.FC<MapProps> = ({
   sidebarOpen,
   selectedBorough,
   selectedZip,
+  resetKey,
   onSelectBorough,
   onSelectZip,
   onResetView,
@@ -643,6 +645,40 @@ export const Map: React.FC<MapProps> = ({
     }
   }, [selectedBorough, mapStyle, selectedZip]);
 
+  const resetMapCamera = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Remove any active open popups
+    const popups = document.getElementsByClassName('maplibregl-popup');
+    while (popups[0]) {
+      popups[0].remove();
+    }
+
+    map.flyTo({
+      center: [-73.96, 40.73],
+      zoom: 10.5,
+      pitch: 15,
+      bearing: 0,
+      essential: true,
+      duration: 1200,
+    });
+  };
+
+  // Trigger camera reset whenever resetKey increments
+  useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      resetMapCamera();
+    }
+  }, [resetKey]);
+
+  const handleMapResetClick = () => {
+    resetMapCamera();
+    if (onResetView) {
+      onResetView();
+    }
+  };
+
   // Resize on sidebar collapse
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -660,7 +696,7 @@ export const Map: React.FC<MapProps> = ({
       {/* Floating Reset View Button */}
       {onResetView && (
         <button
-          onClick={onResetView}
+          onClick={handleMapResetClick}
           className={`absolute top-2.5 right-14 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border shadow-md backdrop-blur-md text-xs font-semibold transition ${
             isLight
               ? 'bg-white/95 hover:bg-slate-50 text-slate-700 border-slate-200 hover:text-blue-600'
