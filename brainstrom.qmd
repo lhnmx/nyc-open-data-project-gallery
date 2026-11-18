@@ -1,10 +1,9 @@
 ---
-title: "Your Document Title"
+title: "Project Proposal"
 author:
   name: Matthew Wolf
   email: mcw2209@columbia.edu
   affiliation: Columbia University
-
 
 date: "today"
 format:
@@ -12,64 +11,77 @@ format:
     toc: true
     theme: yeti
 ---
-This notebook is mainly going to serve as a proof on concept for how to use 311 data on a unified project.
-should 
 
-## Research Question:
-  - How do 311 complaints distribute throughout NY?
-    - Borough, Building Type, ZIP, City could all be faceted across
-  - Want to create a tool where a user could enter their zip, borough, etc.  
-  - Start with Rats and Pests, expand from there
-  
+## Project Idea
 
+We will be participating in the NYC Open Data project gallery. The main objective of our project will be developing a website that shows an interactive map of NYC that allows users to see where 311 service requests occur. This would allow a user to answer questions like: "which borough had the most rat infestation 311 complaints in 2020 - 2025?" The dataset we will be using ([found here](https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2020-to-Present/erm2-nwe9/about_data)) contains 23 million rows where each row represents an individual 311 service request with corresponding information. The fields which will be most important to the development of our project are:
 
-## Importing libs
+- **create_date** - in order to track complaints over time
+
+- **complaint_type** and **descriptor** - information about the nature of the 311 complaint
+
+- **location type** - filtering by residential building or sidewalk, etc.
+
+- **incident_zip**, **incident_address**, **city**, **borough**, **location** - geographic data which can be used to build the map
+
+## Initial Analysis
+
+For the initial analysis below I will be using the nycOpenData library, which uses their api to import the data. Without an API key though, it restricts the size of import to 10,000 records, so the initial analysis will be done using that.
+
+### Importing Libraries and Data
 
 ```{r}
 library(tidyverse)
 library(nycOpenData)
 library(ggplot2)
+library(sf)
+library(leaflet)
+
+sample_311 = nyc_any_dataset('https://data.cityofnewyork.us/resource/erm2-nwe9.json') 
 ```
 
-## Load in Data 
+### Most common complaints
 
-```{r}
-sample_311 = nyc_any_dataset(json_link = 'https://data.cityofnewyork.us/resource/erm2-nwe9.json')
-```
-
-## Columns that we want
--
-
-```{r}
-colnames(sample_311)
-```
-
-
-## EDA
-
-### common complaints, descriptors, and locations
+The most common types of complaints (in the sample) seem to be illegal parking, heat/hot water, noise, and then unsanitary conditions
 
 ```{r}
 complaints = sample_311 |> count(complaint_type, sort = TRUE) # Types of complaints that can show up across
-descriptors = sample_311 |> count(descriptor, sort = TRUE)
-locations = sample_311 |> count(location_type, sort = TRUE)
-# borough column may also be of interest
+
+complaints
+
+complaints |> 
+  head(10) |>
+  ggplot(aes(y = fct_rev(fct_infreq(complaint_type, n)), x = n)) +
+  geom_col(color = "white", fill = "lightblue") +
+  labs(
+    title = "Most Frequent 311 Complaint Types",
+    x = "Count",
+    y = "311 Complaint Type",
+    caption = "Disclaimer: 10,000 row sample"
+  )
 ```
 
-
-### Unsanitary Condition descriptors
+### Map of pest complaints
 
 ```{r}
-sample_311 |>
+pest_data = sample_311 |>
   filter(
-    complaint_type == "UNSANITARY CONDITION"
-  ) |>
-  count(descriptor, sort = TRUE)
-  
+    complaint_type == "UNSANITARY CONDITION" &
+    descriptor == "PESTS"
+  )
+
+pal = colorFactor(palette = "Set1",
+                  domain = pest_data$park_borough)
 ```
 
 ```{r}
-glimpse(sample_311)
-
+leaflet(data = pest_data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    fillColor = ~pal(park_borough),
+    color = ~pal(park_borough), # Colors the outer ring to match (or set stroke = FALSE)
+  )
 ```
 
