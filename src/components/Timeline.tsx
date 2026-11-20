@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
-import { TimelineMonth } from '../types';
+import { Period, TimelineMonth } from '../types';
 
 interface TimelineProps {
   months: TimelineMonth[];
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
+  /** Human-readable label for the selected period (e.g. "Dec 2024 – Nov 2025") */
+  periodLabel: string;
   sidebarOpen: boolean;
   isLight?: boolean;
 }
@@ -14,6 +18,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   months,
   selectedIndex,
   onSelectIndex,
+  period,
+  onPeriodChange,
+  periodLabel,
   sidebarOpen,
   isLight = true,
 }) => {
@@ -32,6 +39,13 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, [isPlaying, selectedIndex, months.length, onSelectIndex]);
 
   const currentMonth = months[selectedIndex] || months[0];
+  const label = `${periodLabel}${currentMonth?.partial ? ' (partial month)' : ''}`;
+
+  // Year tick marks positioned along the slider (January of each year)
+  const yearTicks = months
+    .map((m, idx) => ({ m, idx }))
+    .filter(({ m, idx }) => m.month === 1 || idx === 0);
+  const pct = (idx: number) => (months.length > 1 ? (idx / (months.length - 1)) * 100 : 0);
 
   return (
     <div
@@ -66,7 +80,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             </button>
             <div className="flex items-center gap-1.5 text-xs font-bold">
               <Calendar className="w-3.5 h-3.5 text-blue-600" />
-              <span>{currentMonth?.label}</span>
+              <span>{label}</span>
             </div>
             <button
               onClick={() => setIsMinimized(false)}
@@ -97,7 +111,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     Timeline Period
                   </span>
                   <span className={`text-xs font-bold tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {currentMonth?.label}
+                    {label}
                   </span>
                 </div>
               </div>
@@ -153,6 +167,34 @@ export const Timeline: React.FC<TimelineProps> = ({
 
                 <div className="w-[1px] h-4 bg-slate-300 mx-1 opacity-60" />
 
+                <div
+                  className={`flex p-0.5 rounded-lg border text-[10px] font-semibold ${
+                    isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-800 border-slate-700'
+                  }`}
+                  role="group"
+                  aria-label="Time period"
+                >
+                  {(['month', '12mo'] as Period[]).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => onPeriodChange(p)}
+                      aria-pressed={period === p}
+                      className={`px-1.5 py-0.5 rounded-md transition ${
+                        period === p
+                          ? isLight
+                            ? 'bg-white text-blue-700 shadow-sm'
+                            : 'bg-slate-700 text-cyan-300 shadow-sm'
+                          : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title={p === 'month' ? 'Show the selected month' : 'Show the 12 months ending with the selected month'}
+                    >
+                      {p === 'month' ? '1 mo' : '12 mo'}
+                    </button>
+                  ))}
+                </div>
+
                 <button
                   onClick={() => setIsMinimized(true)}
                   className={`p-1 rounded transition ${
@@ -176,6 +218,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                   setIsPlaying(false);
                   onSelectIndex(Number(e.target.value));
                 }}
+                aria-label="Select month"
+                aria-valuetext={label}
                 className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer focus:outline-none ${
                   isLight
                     ? 'bg-slate-200 accent-blue-600'
@@ -183,31 +227,30 @@ export const Timeline: React.FC<TimelineProps> = ({
                 }`}
               />
 
-              {/* Month labels */}
-              <div className="flex justify-between mt-1.5 text-[9px] select-none">
-                {months.map((m, idx) => {
-                  const isActive = idx === selectedIndex;
-                  return (
-                    <button
-                      key={`${m.year}-${m.month}`}
-                      onClick={() => {
-                        setIsPlaying(false);
-                        onSelectIndex(idx);
-                      }}
-                      className={`transition font-medium ${
-                        isActive
-                          ? isLight
-                            ? 'text-blue-700 font-bold scale-110'
-                            : 'text-cyan-400 font-bold scale-110'
-                          : isLight
-                          ? 'text-slate-400 hover:text-slate-700'
-                          : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      {m.shortLabel}
-                    </button>
-                  );
-                })}
+              {/* Year ticks */}
+              <div className="relative h-4 mt-1 text-[9px] select-none">
+                {yearTicks.map(({ m, idx }) => (
+                  <button
+                    key={m.ym}
+                    onClick={() => {
+                      setIsPlaying(false);
+                      onSelectIndex(idx);
+                    }}
+                    style={{ left: `${pct(idx)}%` }}
+                    className={`absolute -translate-x-1/2 transition font-medium ${
+                      currentMonth?.year === m.year
+                        ? isLight
+                          ? 'text-blue-700 font-bold'
+                          : 'text-cyan-400 font-bold'
+                        : isLight
+                        ? 'text-slate-400 hover:text-slate-700'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                    title={`Jump to ${m.label}`}
+                  >
+                    {m.year}
+                  </button>
+                ))}
               </div>
             </div>
           </>

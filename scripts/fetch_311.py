@@ -5,78 +5,23 @@ Outputs cleaned GeoJSON into public/data/ for the static web app.
 """
 
 import json
-import os
-import ssl
-import urllib.parse
-import urllib.request
-from pathlib import Path
 
-# SSL Context for macOS certificate verification
-try:
-    import certifi
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
-except Exception:
-    ssl_context = ssl._create_unverified_context()
+import socrata
 
-# Load environment variables using python-dotenv
-try:
-    from dotenv import load_dotenv
-    ROOT_DIR = Path(__file__).resolve().parent.parent
-    load_dotenv(ROOT_DIR / ".env")
-except ImportError:
-    pass
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-OUTPUT_DIR = ROOT_DIR / "public" / "data"
-API_URL = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
-
-def get_app_token() -> str:
-    """Read Socrata App Token from environment or .env file."""
-    token = (
-        os.environ.get("NYC_OPEN_DATA_APP_TOKEN")
-        or os.environ.get("app_token")
-        or os.environ.get("NYC_OPEN_DATA_TOKEN")
-    )
-    if token:
-        return token.strip('"\'')
-    
-    # Fallback manual read if python-dotenv is not installed
-    env_file = ROOT_DIR / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("NYC_OPEN_DATA_APP_TOKEN=") or line.startswith("app_token="):
-                return line.split("=", 1)[1].strip('"\'')
-    return ""
+OUTPUT_DIR = socrata.OUTPUT_DIR
 
 def fetch_311_sample(complaint_type: str = "Rodent", limit: int = 1500):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    token = get_app_token()
-    headers = {
-        "User-Agent": "NYC-311-Gallery-Scaffold/1.0",
-        "Accept": "application/json",
-    }
-    if token:
-        headers["X-App-Token"] = token
-        print("Using Socrata App Token from .env")
-
     params = {
         "$limit": str(limit),
         "$order": "created_date DESC",
         "$where": f"complaint_type = '{complaint_type}' AND latitude IS NOT NULL",
         "$select": "unique_key,created_date,complaint_type,descriptor,incident_zip,borough,latitude,longitude,location_type",
     }
-    
-    url = f"{API_URL}?{urllib.parse.urlencode(params)}"
     print(f"Fetching {limit} records for '{complaint_type}' from NYC Open Data...")
-    
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=30, context=ssl_context) as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"HTTP error {resp.status}")
-        raw_data = json.loads(resp.read().decode("utf-8"))
-        
+    raw_data = socrata.query(params)
+
     print(f"Downloaded {len(raw_data)} records.")
     
     features = []
