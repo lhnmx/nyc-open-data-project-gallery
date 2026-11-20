@@ -16,8 +16,15 @@ import {
   ChevronRight,
   Sparkles,
   RotateCcw,
+  Ban,
+  Users,
+  Hash,
+  Info,
+  Link2,
+  Check,
 } from 'lucide-react';
-import { Borough, ComplaintCategory, FilterState, VizMode, ZipEntry } from '../types';
+import { Borough, ComplaintCategory, FilterState, Metric, VizMode, ZipEntry, ZipStat } from '../types';
+import { loadZipIndex } from '../data';
 
 interface FilterSidebarProps {
   filters: FilterState;
@@ -26,6 +33,12 @@ interface FilterSidebarProps {
   setIsOpen: (open: boolean) => void;
   onSelectZipLocation?: (entry: ZipEntry) => void;
   onResetView?: () => void;
+  onOpenAbout?: () => void;
+  /** Stats panel, rendered below the filters */
+  children?: React.ReactNode;
+  /** Per-ZIP numbers for the current selection */
+  zipStats: Record<string, ZipStat>;
+  periodLabel: string;
 }
 
 const BOROUGHS: Borough[] = ['All', 'Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island'];
@@ -62,11 +75,24 @@ const CATEGORIES: { label: ComplaintCategory; icon: React.ReactNode; lightColor:
     darkColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 ring-1 ring-emerald-500/40',
   },
   {
+    label: 'Blocked Driveway',
+    icon: <Ban className="w-4 h-4" />,
+    lightColor: 'bg-sky-50 text-sky-800 border-sky-300 ring-1 ring-sky-400/40',
+    darkColor: 'bg-sky-500/20 text-sky-400 border-sky-500/30 ring-1 ring-sky-500/40',
+  },
+  {
     label: 'Sanitation / Dirty Conditions',
     icon: <Trash2 className="w-4 h-4" />,
     lightColor: 'bg-yellow-50 text-yellow-800 border-yellow-300 ring-1 ring-yellow-400/40',
     darkColor: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30 ring-1 ring-yellow-500/40',
   },
+];
+
+const CATEGORY_DISPLAY: Partial<Record<ComplaintCategory, string>> = { All: 'All tracked types' };
+
+const METRIC_OPTIONS: { id: Metric; label: string; icon: React.ReactNode; hint: string }[] = [
+  { id: 'rate', label: 'Per 10k residents', icon: <Users className="w-3.5 h-3.5" />, hint: 'Fair comparison between ZIPs of different sizes' },
+  { id: 'count', label: 'Total complaints', icon: <Hash className="w-3.5 h-3.5" />, hint: 'Raw number of 311 complaints' },
 ];
 
 const VIZ_OPTIONS: { id: VizMode; label: string; icon: React.ReactNode }[] = [
@@ -82,17 +108,56 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   setIsOpen,
   onSelectZipLocation,
   onResetView,
+  zipStats,
+  periodLabel,
+  onOpenAbout,
+  children,
 }) => {
   const isLight = filters.mapStyle === 'light';
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  const copyLink = async () => {
+    const url = window.location.href;
+    // Async clipboard API can reject (or hang) without focus/permission; fall back to execCommand
+    const viaApi = () =>
+      Promise.race([
+        navigator.clipboard.writeText(url),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500)),
+      ]);
+    const viaTextarea = () => {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (!ok) throw new Error('execCommand failed');
+    };
+    let state: 'copied' | 'failed' = 'copied';
+    try {
+      if (typeof navigator.clipboard?.writeText === "function") await viaApi();
+      else viaTextarea();
+    } catch {
+      try {
+        viaTextarea();
+      } catch {
+        state = 'failed';
+      }
+    }
+    setCopyState(state);
+    setTimeout(() => setCopyState('idle'), 2500);
+  };
   const [zipList, setZipList] = useState<ZipEntry[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Load zip index
   useEffect(() => {
-    fetch('/data/zip_index.json')
-      .then((res) => res.json())
-      .then((data: ZipEntry[]) => setZipList(data))
+    loadZipIndex()
+      .then((data) => setZipList(data))
       .catch((err) => console.error('Error loading zip index:', err));
   }, []);
 
@@ -196,6 +261,30 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenAbout}
+              className={`p-1.5 rounded-md transition ${
+                isLight
+                  ? 'hover:bg-slate-100 text-slate-600 hover:text-blue-600'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-cyan-400'
+              }`}
+              title="About this map & data"
+              aria-label="About this map & data"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            <button
+              onClick={copyLink}
+              className={`p-1.5 rounded-md transition ${
+                isLight
+                  ? 'hover:bg-slate-100 text-slate-600 hover:text-blue-600'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-cyan-400'
+              }`}
+              title="Copy link to this view"
+              aria-label="Copy link to this view"
+            >
+              {copyState === 'copied' ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+            </button>
             {onResetView && (
               <button
                 onClick={onResetView}
@@ -239,6 +328,19 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
         </div>
 
+        {copyState !== 'idle' && (
+          <div
+            role="status"
+            className={`px-4 py-1.5 text-[11px] font-medium border-b ${
+              isLight ? 'bg-blue-50 text-blue-800 border-blue-100' : 'bg-cyan-500/10 text-cyan-300 border-slate-800'
+            }`}
+          >
+            {copyState === 'copied'
+              ? 'Link to this view copied.'
+              : "Couldn't copy automatically — copy the address bar to share this view."}
+          </div>
+        )}
+
         {/* Scrollable Filters Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {/* 1. Visualization Mode */}
@@ -272,41 +374,39 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               })}
             </div>
 
-            {/* In-Sidebar Choropleth Scale */}
+            {/* Metric toggle (choropleth only) */}
             {filters.vizMode === 'choropleth' && (
-              <div className={`mt-2 p-2 rounded-lg border text-xs ${
-                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/50 border-slate-700/60'
-              }`}>
-                <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 flex justify-between">
-                  <span>Complaint Scale</span>
-                  <span className="text-slate-400 font-normal">Complaints/ZIP</span>
+              <div className="mt-2">
+                <div className={`grid grid-cols-2 p-1 rounded-lg border gap-1 ${
+                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-slate-800/80 border-slate-700'
+                }`}>
+                  {METRIC_OPTIONS.map((opt) => {
+                    const isSelected = filters.metric === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setFilters((prev) => ({ ...prev, metric: opt.id }))}
+                        aria-pressed={isSelected}
+                        title={opt.hint}
+                        className={`flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-md text-[11px] font-semibold transition ${
+                          isSelected
+                            ? isLight
+                              ? 'bg-white text-blue-700 shadow-sm'
+                              : 'bg-slate-700 text-cyan-300 shadow-sm'
+                            : isLight
+                            ? 'text-slate-600 hover:text-slate-900'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.icon}
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center justify-between gap-1">
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-slate-200 border border-slate-300" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">0</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-yellow-200 border border-yellow-300" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">1-5</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-amber-400 border border-amber-500" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">6-15</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-orange-400 border border-orange-500" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">16-30</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-red-400 border border-red-500" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">31-45</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="w-5 h-2.5 rounded-sm bg-red-600 border border-red-700" />
-                    <span className="text-[9px] mt-0.5 text-slate-500">45+</span>
-                  </div>
-                </div>
+                <p className="text-[10px] text-slate-400 mt-1 px-0.5">
+                  {METRIC_OPTIONS.find((o) => o.id === filters.metric)?.hint}
+                </p>
               </div>
             )}
           </div>
@@ -369,8 +469,11 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                         <span className="text-[11px] text-slate-400 ml-1.5">({item.borough})</span>
                       </div>
                     </div>
-                    <span className="text-[11px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
-                      {item.count} complaints
+                    <span
+                      className="text-[11px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded"
+                      title={periodLabel}
+                    >
+                      {(zipStats[item.zip]?.count ?? 0).toLocaleString()} complaints
                     </span>
                   </button>
                 ))}
@@ -432,7 +535,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                   >
                     <div className="flex items-center gap-2.5">
                       {cat.icon}
-                      <span>{cat.label}</span>
+                      <span>{CATEGORY_DISPLAY[cat.label] ?? cat.label}</span>
                     </div>
                     {isSelected && (
                       <span className={`w-2 h-2 rounded-full ${isLight ? 'bg-blue-600' : 'bg-cyan-400'} animate-pulse`} />
@@ -443,39 +546,8 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
             </div>
           </div>
 
-          {/* 5. Metric Summary Card */}
-          <div className={`p-3.5 rounded-xl border space-y-2 ${
-            isLight
-              ? 'bg-slate-50/80 border-slate-200/90 text-slate-600'
-              : 'bg-slate-800/40 border-slate-700/50 text-slate-400'
-          }`}>
-            <div className="flex items-center justify-between text-xs">
-              <span>View Mode</span>
-              <span className={`font-semibold capitalize ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>
-                {filters.vizMode}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span>Selected Area</span>
-              <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-slate-200'}`}>
-                {filters.selectedZip ? `ZIP ${filters.selectedZip}` : filters.borough}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span>Complaint Focus</span>
-              <span className={`font-semibold ${isLight ? 'text-blue-700' : 'text-cyan-400'}`}>{filters.category}</span>
-            </div>
-            <div className={`pt-2 border-t flex items-center justify-between ${isLight ? 'border-slate-200' : 'border-slate-700/60'}`}>
-              <span className="text-xs">Data Coverage</span>
-              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                isLight
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              }`}>
-                ● 178 NYC ZIP Codes
-              </span>
-            </div>
-          </div>
+          {/* 5. Stats for the current selection */}
+          {children}
 
           {/* Reset View Button */}
           {onResetView && (
@@ -497,7 +569,15 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
         <div className={`p-3 border-t text-[11px] text-center ${
           isLight ? 'border-slate-200 text-slate-500 bg-slate-50/50' : 'border-slate-800 text-slate-500'
         }`}>
-          NYC Open Data 311 Socrata API
+          Data:{' '}
+          <a
+            href="https://data.cityofnewyork.us/d/erm2-nwe9"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-blue-600"
+          >
+            NYC Open Data · 311 Service Requests (2020–present)
+          </a>
         </div>
       </aside>
     </>
